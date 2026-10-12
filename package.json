@@ -1,0 +1,19 @@
+{
+  "name": "lista-tareas",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+"scripts": {
+  "build": "tsc",
+  "watch": "tsc --watch",
+  "start": "tsc && serve . -l 3000"
+},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "serve": "^14.2.6",
+    "typescript": "^7.0.2"
+  }
+}
