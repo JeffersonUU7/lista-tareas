@@ -1,107 +1,107 @@
-import { Tarea } from "../models/Tarea.js";
-import { StorageService } from "../services/StorageService.js";
-import { TareaView, Filtro } from "../views/TareaView.js";
+import { TareaView } from "../views/TareaView.js";
+import { TareaModel, Criterios, DatosTarea, FiltroEstado, FiltroPrioridad, Orden } from "../models/TareaModel.js";
 
 export class TareaController {
-  private tareas: Tarea[];
   private editandoId: number | null = null;
-  private textoBusqueda = "";
-  private filtro: Filtro = "todas";
+  private criterios: Criterios = { texto: "", estado: "todas", prioridad: "todas", orden: "fecha-asc" };
 
-  constructor(private view: TareaView, private storage: StorageService) {
-    this.tareas = this.storage.cargar();
-    this.conectarEventos();
-    this.actualizarVista();
+  constructor(private view: TareaView, private model: TareaModel) {
+    this.enlazarEventos();
+    this.refrescar();
+    // Actualiza automáticamente las tareas vencidas cada minuto
+    window.setInterval(() => this.refrescar(), 60000);
   }
 
-  private conectarEventos(): void {
-    this.view.alEnviar((t, d) => this.guardar(t, d));
-    this.view.alBuscar((texto) => {
-      this.textoBusqueda = texto;
-      this.actualizarVista();
-    });
-    this.view.alFiltrar((f) => {
-      this.filtro = f;
-      this.actualizarVista();
-    });
-    this.view.alCancelar(() => this.cancelarEdicion());
+  private enlazarEventos(): void {
+    this.view.alCrear((d) => this.handleCreate(d));
+    this.view.alGuardarEdicion((d) => this.handleUpdate(d));
+    this.view.alBuscar((t) => this.handleSearch(t));
+    this.view.alFiltrar((e, p) => this.handleFilter(e, p));
+    this.view.alOrdenar((o) => this.handleSort(o));
     this.view.alAccion((accion, id) => {
-      if (accion === "toggle") this.toggle(id);
-      if (accion === "editar") this.iniciarEdicion(id);
-      if (accion === "eliminar") this.eliminar(id);
+      if (accion === "toggle") this.handleToggle(id);
+      if (accion === "editar") this.handleEdit(id);
+      if (accion === "eliminar") this.handleDelete(id);
     });
   }
 
-  private guardar(titulo: string, descripcion: string): void {
+  // ---------- Manejadores ----------
+  private handleCreate(datos: DatosTarea): void {
     try {
-      if (this.editandoId === null) {
-        this.tareas.push(new Tarea(Date.now(), titulo, descripcion));
-        this.view.mostrarMensaje("Tarea agregada.", "ok");
-      } else {
-        const tarea = this.buscarPorId(this.editandoId);
-        tarea?.actualizar(titulo, descripcion);
-        this.view.mostrarMensaje("Tarea actualizada.", "ok");
-        this.editandoId = null;
-      }
-      this.storage.guardar(this.tareas);
+      this.model.addTarea(datos);
       this.view.limpiarFormulario();
-      this.actualizarVista();
+      this.view.mostrarNotificacion("Tarea agregada correctamente.", "ok");
+      this.refrescar();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Error desconocido.";
-      this.view.mostrarMensaje(msg, "error");
+      this.view.mostrarNotificacion(this.mensajeError(e), "error");
     }
   }
 
-  private toggle(id: number): void {
-    this.buscarPorId(id)?.toggle();
-    this.storage.guardar(this.tareas);
-    this.actualizarVista();
-  }
-
-  private iniciarEdicion(id: number): void {
-    const tarea = this.buscarPorId(id);
+  private handleEdit(id: number): void {
+    const tarea = this.model.getById(id);
     if (!tarea) return;
     this.editandoId = id;
-    this.view.cargarEnFormulario(tarea);
+    this.view.renderEditForm(tarea);
   }
 
-  private cancelarEdicion(): void {
-    this.editandoId = null;
-    this.view.limpiarFormulario();
+  private handleUpdate(datos: DatosTarea): void {
+    if (this.editandoId === null) return;
+    try {
+      this.model.updateTarea(this.editandoId, datos);
+      this.editandoId = null;
+      this.view.cerrarEdicion();
+      this.view.mostrarNotificacion("Tarea actualizada.", "ok");
+      this.refrescar();
+    } catch (e) {
+      this.view.mostrarErrorEdicion(this.mensajeError(e));
+    }
   }
 
-  private eliminar(id: number): void {
+  private handleDelete(id: number): void {
     if (!this.view.confirmar("¿Seguro que deseas eliminar esta tarea?")) return;
-    this.tareas = this.tareas.filter((t) => t.id !== id);
-    if (this.editandoId === id) this.cancelarEdicion();
-    this.storage.guardar(this.tareas);
-    this.view.mostrarMensaje("Tarea eliminada.", "ok");
-    this.actualizarVista();
+    try {
+      this.model.deleteTarea(id);
+      this.view.mostrarNotificacion("Tarea eliminada.", "info");
+      this.refrescar();
+    } catch (e) {
+      this.view.mostrarNotificacion(this.mensajeError(e), "error");
+    }
   }
 
-  private buscarPorId(id: number): Tarea | undefined {
-    return this.tareas.find((t) => t.id === id);
+  private handleToggle(id: number): void {
+    try {
+      this.model.toggleTarea(id);
+      this.refrescar();
+    } catch (e) {
+      this.view.mostrarNotificacion(this.mensajeError(e), "error");
+    }
   }
 
-  private tareasFiltradas(): Tarea[] {
-    const texto = this.textoBusqueda.trim().toLowerCase();
-    return this.tareas.filter((t) => {
-      const coincideTexto = t.titulo.toLowerCase().includes(texto);
-      const coincideEstado =
-        this.filtro === "todas" ||
-        (this.filtro === "completadas" && t.completada) ||
-        (this.filtro === "pendientes" && !t.completada);
-      return coincideTexto && coincideEstado;
-    });
+  private handleSearch(texto: string): void {
+    this.criterios.texto = texto;
+    this.refrescar();
   }
 
-  private actualizarVista(): void {
-    this.view.renderizar(this.tareasFiltradas());
-    const completadas = this.tareas.filter((t) => t.completada).length;
-    this.view.actualizarResumen(
-      this.tareas.length,
-      this.tareas.length - completadas,
-      completadas
-    );
+  private handleFilter(estado: FiltroEstado, prioridad: FiltroPrioridad): void {
+    this.criterios.estado = estado;
+    this.criterios.prioridad = prioridad;
+    this.refrescar();
+  }
+
+  private handleSort(orden: Orden): void {
+    this.criterios.orden = orden;
+    this.refrescar();
+  }
+
+  // ---------- Utilidades ----------
+  private refrescar(): void {
+    this.view.renderizar(this.model.consultar(this.criterios));
+    const resumen = this.model.getResumen();
+    this.view.renderCounter(resumen.pendientes, resumen.vencidas);
+    this.view.actualizarResumen(resumen, this.model.getProximas(5));
+  }
+
+  private mensajeError(e: unknown): string {
+    return e instanceof Error ? e.message : "Ocurrió un error inesperado.";
   }
 }

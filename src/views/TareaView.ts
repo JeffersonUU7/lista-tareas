@@ -1,43 +1,72 @@
-import { Tarea } from "../models/Tarea.js";
+import { Tarea, Prioridad } from "../models/Tarea.js";
+import { DatosTarea, FiltroEstado, FiltroPrioridad, Orden, Resumen } from "../models/TareaModel.js";
 
-export type Filtro = "todas" | "pendientes" | "completadas";
+export type TipoNotificacion = "ok" | "error" | "info";
 
 export class TareaView {
-  private form = document.getElementById("form-tarea") as HTMLFormElement;
-  private inputTitulo = document.getElementById("titulo") as HTMLInputElement;
-  private inputDescripcion = document.getElementById("descripcion") as HTMLTextAreaElement;
-  private inputBuscar = document.getElementById("buscar") as HTMLInputElement;
-  private selectFiltro = document.getElementById("filtro") as HTMLSelectElement;
-  private lista = document.getElementById("lista") as HTMLUListElement;
-  private mensaje = document.getElementById("mensaje") as HTMLDivElement;
-  private btnGuardar = document.getElementById("btn-guardar") as HTMLButtonElement;
-  private btnCancelar = document.getElementById("btn-cancelar") as HTMLButtonElement;
-  private anillo = document.getElementById("anillo") as HTMLDivElement;
-  private pctTexto = document.getElementById("pct-texto") as HTMLSpanElement;
-  private statTotal = document.getElementById("stat-total") as HTMLSpanElement;
-  private statPend = document.getElementById("stat-pend") as HTMLSpanElement;
-  private statComp = document.getElementById("stat-comp") as HTMLSpanElement;
-  private barraPend = document.getElementById("barra-pend") as HTMLDivElement;
-  private barraComp = document.getElementById("barra-comp") as HTMLDivElement;
+  // Formulario de creación
+  private form = this.el<HTMLFormElement>("form-tarea");
+  private inTitulo = this.el<HTMLInputElement>("titulo");
+  private inDescripcion = this.el<HTMLTextAreaElement>("descripcion");
+  private inPrioridad = this.el<HTMLSelectElement>("prioridad");
+  private inFecha = this.el<HTMLInputElement>("fecha");
 
-  // ---- Eventos (el controlador los conecta) ----
-  alEnviar(handler: (titulo: string, descripcion: string) => void): void {
+  // Controles de la lista
+  private inBuscar = this.el<HTMLInputElement>("buscar");
+  private selEstado = this.el<HTMLSelectElement>("filtro-estado");
+  private selPrioridad = this.el<HTMLSelectElement>("filtro-prioridad");
+  private selOrden = this.el<HTMLSelectElement>("orden");
+  private lista = this.el<HTMLUListElement>("lista");
+  private toasts = this.el<HTMLDivElement>("toasts");
+
+  // Modal de edición
+  private modal = this.el<HTMLDivElement>("modal-editar");
+  private formEditar = this.el<HTMLFormElement>("form-editar");
+  private eTitulo = this.el<HTMLInputElement>("e-titulo");
+  private eDescripcion = this.el<HTMLTextAreaElement>("e-descripcion");
+  private ePrioridad = this.el<HTMLSelectElement>("e-prioridad");
+  private eFecha = this.el<HTMLInputElement>("e-fecha");
+  private errorEditar = this.el<HTMLDivElement>("error-editar");
+
+  // Estadísticas
+  private anillo = this.el<HTMLDivElement>("anillo");
+  private listaProximas = this.el<HTMLUListElement>("proximas");
+
+  constructor() {
+    this.inFecha.min = Tarea.hoy();
+    this.inFecha.value = Tarea.hoy();
+    this.iniciarPestanas();
+    this.iniciarModal();
+  }
+
+  // ======== Eventos (el controlador los conecta) ========
+  alCrear(handler: (datos: DatosTarea) => void): void {
     this.form.addEventListener("submit", (e) => {
       e.preventDefault();
-      handler(this.inputTitulo.value, this.inputDescripcion.value);
+      handler(this.leer(this.inTitulo, this.inDescripcion, this.inPrioridad, this.inFecha));
+    });
+  }
+
+  alGuardarEdicion(handler: (datos: DatosTarea) => void): void {
+    this.formEditar.addEventListener("submit", (e) => {
+      e.preventDefault();
+      handler(this.leer(this.eTitulo, this.eDescripcion, this.ePrioridad, this.eFecha));
     });
   }
 
   alBuscar(handler: (texto: string) => void): void {
-    this.inputBuscar.addEventListener("input", () => handler(this.inputBuscar.value));
+    this.inBuscar.addEventListener("input", () => handler(this.inBuscar.value));
   }
 
-  alFiltrar(handler: (filtro: Filtro) => void): void {
-    this.selectFiltro.addEventListener("change", () => handler(this.selectFiltro.value as Filtro));
+  alFiltrar(handler: (estado: FiltroEstado, prioridad: FiltroPrioridad) => void): void {
+    const emitir = () =>
+      handler(this.selEstado.value as FiltroEstado, this.selPrioridad.value as FiltroPrioridad);
+    this.selEstado.addEventListener("change", emitir);
+    this.selPrioridad.addEventListener("change", emitir);
   }
 
-  alCancelar(handler: () => void): void {
-    this.btnCancelar.addEventListener("click", handler);
+  alOrdenar(handler: (orden: Orden) => void): void {
+    this.selOrden.addEventListener("change", () => handler(this.selOrden.value as Orden));
   }
 
   alAccion(handler: (accion: string, id: number) => void): void {
@@ -49,14 +78,14 @@ export class TareaView {
     });
   }
 
-  // ---- Renderizado ----
+  // ======== Renderizado ========
   renderizar(tareas: Tarea[]): void {
     this.lista.innerHTML = "";
 
     if (tareas.length === 0) {
       const vacio = document.createElement("li");
       vacio.className = "vacio";
-      vacio.textContent = "No hay tareas para mostrar.";
+      vacio.textContent = "No hay tareas para mostrar. Agrega una o ajusta los filtros.";
       this.lista.appendChild(vacio);
       return;
     }
@@ -64,15 +93,35 @@ export class TareaView {
     tareas.forEach((t) => {
       const li = document.createElement("li");
       li.dataset.id = String(t.id);
-      li.className = t.completada ? "tarea completada" : "tarea";
+      li.className = [
+        "tarea",
+        `p-${t.prioridad}`,
+        t.completada ? "completada" : "",
+        t.estaVencida() ? "vencida" : "",
+      ].filter(Boolean).join(" ");
 
       const info = document.createElement("div");
       info.className = "info";
+
+      const fila = document.createElement("div");
+      fila.className = "fila-titulo";
       const titulo = document.createElement("strong");
       titulo.textContent = t.titulo;
-      const desc = document.createElement("p");
-      desc.textContent = t.descripcion;
-      info.append(titulo, desc);
+      const badge = document.createElement("span");
+      badge.className = `badge prio-${t.prioridad}`;
+      badge.textContent = t.prioridad.charAt(0).toUpperCase() + t.prioridad.slice(1);
+      fila.append(titulo, badge);
+
+      info.appendChild(fila);
+      if (t.descripcion) {
+        const desc = document.createElement("p");
+        desc.textContent = t.descripcion;
+        info.appendChild(desc);
+      }
+      const fecha = document.createElement("span");
+      fecha.className = "fecha";
+      fecha.textContent = this.textoFecha(t);
+      info.appendChild(fecha);
 
       const acciones = document.createElement("div");
       acciones.className = "acciones";
@@ -87,36 +136,104 @@ export class TareaView {
     });
   }
 
-  private crearBoton(texto: string, accion: string): HTMLButtonElement {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = texto;
-    b.dataset.accion = accion;
-    return b;
+  renderCounter(pendientes: number, vencidas: number): void {
+    this.texto("contador-pend", `${pendientes} ${pendientes === 1 ? "pendiente" : "pendientes"}`);
+    this.texto("badge-tab", pendientes);
+    this.texto(
+      "contador-venc",
+      vencidas === 0 ? "Sin vencidas" : `${vencidas} ${vencidas === 1 ? "vencida" : "vencidas"}`
+    );
+    this.el("contador-venc").classList.toggle("alerta", vencidas > 0);
   }
 
-  actualizarResumen(total: number, pendientes: number, completadas: number): void {
-    const pct = total === 0 ? 0 : Math.round((completadas / total) * 100);
-    const pctPend = total === 0 ? 0 : Math.round((pendientes / total) * 100);
-
-    this.statTotal.textContent = String(total);
-    this.statPend.textContent = String(pendientes);
-    this.statComp.textContent = String(completadas);
-    this.pctTexto.textContent = `${pct}%`;
-
+  actualizarResumen(r: Resumen, proximas: Tarea[]): void {
+    const pct = r.total === 0 ? 0 : Math.round((r.completadas / r.total) * 100);
+    this.texto("est-total", r.total);
+    this.texto("est-pend", r.pendientes);
+    this.texto("est-comp", r.completadas);
+    this.texto("est-venc", r.vencidas);
+    this.texto("pct-texto", `${pct}%`);
     this.anillo.style.setProperty("--pct", String(pct));
-    this.barraComp.style.setProperty("--w", String(pct));
-    this.barraPend.style.setProperty("--w", String(pctPend));
+
+    (["alta", "media", "baja"] as Prioridad[]).forEach((p) => {
+      this.texto(`num-${p}`, r[p]);
+      this.el(`bar-${p}`).style.setProperty("--w", String(r.total === 0 ? 0 : Math.round((r[p] / r.total) * 100)));
+    });
+
+    this.listaProximas.innerHTML = "";
+    if (proximas.length === 0) {
+      const vacio = document.createElement("li");
+      vacio.className = "vacio";
+      vacio.textContent = "No tienes tareas pendientes. 🎉";
+      this.listaProximas.appendChild(vacio);
+      return;
+    }
+    proximas.forEach((t) => {
+      const li = document.createElement("li");
+      li.className = t.estaVencida() ? "prox vencida" : "prox";
+      const nombre = document.createElement("strong");
+      nombre.textContent = t.titulo;
+      const fecha = document.createElement("span");
+      fecha.textContent = this.textoFecha(t);
+      li.append(nombre, fecha);
+      this.listaProximas.appendChild(li);
+    });
   }
 
-  // ---- Utilidades de interfaz ----
-  mostrarMensaje(texto: string, tipo: "ok" | "error"): void {
-    this.mensaje.textContent = texto;
-    this.mensaje.className = `mensaje ${tipo}`;
-    window.setTimeout(() => {
-      this.mensaje.textContent = "";
-      this.mensaje.className = "mensaje";
-    }, 3000);
+  // ======== Edición (modal) ========
+  renderEditForm(tarea: Tarea): void {
+    this.eTitulo.value = tarea.titulo;
+    this.eDescripcion.value = tarea.descripcion;
+    this.ePrioridad.value = tarea.prioridad;
+    this.eFecha.value = tarea.fechaLimite;
+    this.errorEditar.textContent = "";
+    this.modal.hidden = false;
+    document.body.classList.add("sin-scroll");
+    this.eTitulo.focus();
+  }
+
+  cerrarEdicion(): void {
+    this.modal.hidden = true;
+    document.body.classList.remove("sin-scroll");
+  }
+
+  mostrarErrorEdicion(texto: string): void {
+    this.errorEditar.textContent = texto;
+  }
+
+  // ======== Utilidades de interfaz ========
+  mostrarNotificacion(texto: string, tipo: TipoNotificacion = "ok", ms: number = 3500): void {
+    const toast = document.createElement("div");
+    toast.className = `toast ${tipo}`;
+    toast.setAttribute("role", "status");
+    toast.style.setProperty("--dur", `${ms}ms`);
+
+    const icono = document.createElement("span");
+    icono.className = "toast-ico";
+    icono.textContent = tipo === "ok" ? "✔" : tipo === "error" ? "✖" : "ℹ";
+
+    const mensaje = document.createElement("span");
+    mensaje.className = "toast-msg";
+    mensaje.textContent = texto;
+
+    const cerrar = document.createElement("button");
+    cerrar.type = "button";
+    cerrar.className = "toast-x";
+    cerrar.setAttribute("aria-label", "Cerrar notificación");
+    cerrar.textContent = "×";
+
+    const barra = document.createElement("div");
+    barra.className = "toast-barra";
+
+    const quitar = () => {
+      toast.classList.add("saliendo");
+      window.setTimeout(() => toast.remove(), 300);
+    };
+    cerrar.addEventListener("click", quitar);
+    window.setTimeout(quitar, ms); // auto-cierre
+
+    toast.append(icono, mensaje, cerrar, barra);
+    this.toasts.appendChild(toast);
   }
 
   confirmar(texto: string): boolean {
@@ -125,15 +242,75 @@ export class TareaView {
 
   limpiarFormulario(): void {
     this.form.reset();
-    this.btnGuardar.textContent = "Agregar tarea";
-    this.btnCancelar.hidden = true;
+    this.inFecha.min = Tarea.hoy();
+    this.inFecha.value = Tarea.hoy();
   }
 
-  cargarEnFormulario(tarea: Tarea): void {
-    this.inputTitulo.value = tarea.titulo;
-    this.inputDescripcion.value = tarea.descripcion;
-    this.btnGuardar.textContent = "Guardar cambios";
-    this.btnCancelar.hidden = false;
-    this.inputTitulo.focus();
+  // ======== Privados ========
+  private el<T extends HTMLElement = HTMLElement>(id: string): T {
+    const elemento = document.getElementById(id);
+    if (!elemento) throw new Error(`No se encontró el elemento #${id}`);
+    return elemento as T;
+  }
+
+  private texto(id: string, valor: string | number): void {
+    this.el(id).textContent = String(valor);
+  }
+
+  private leer(
+    t: HTMLInputElement,
+    d: HTMLTextAreaElement,
+    p: HTMLSelectElement,
+    f: HTMLInputElement
+  ): DatosTarea {
+    return { titulo: t.value, descripcion: d.value, prioridad: p.value as Prioridad, fechaLimite: f.value };
+  }
+
+  private crearBoton(texto: string, accion: string): HTMLButtonElement {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = texto;
+    b.dataset.accion = accion;
+    return b;
+  }
+
+  private textoFecha(t: Tarea): string {
+    const [y, m, d] = t.fechaLimite.split("-");
+    const f = `${d}/${m}/${y}`;
+    if (t.completada) return `📅 ${f}`;
+    const dias = t.diasRestantes();
+    if (dias < 0) return `⚠ Vencida hace ${-dias} ${-dias === 1 ? "día" : "días"} · ${f}`;
+    if (dias === 0) return `⏰ Vence hoy · ${f}`;
+    if (dias === 1) return `⏳ Vence mañana · ${f}`;
+    return `📅 En ${dias} días · ${f}`;
+  }
+
+  private iniciarPestanas(): void {
+    const tabs = document.querySelectorAll<HTMLButtonElement>(".tab");
+    const paneles = document.querySelectorAll<HTMLElement>(".vista");
+    tabs.forEach((tab) =>
+      tab.addEventListener("click", () => {
+        tabs.forEach((t) => {
+          const activa = t === tab;
+          t.classList.toggle("activa", activa);
+          t.setAttribute("aria-selected", String(activa));
+        });
+        paneles.forEach((p) => {
+          p.hidden = p.id !== `vista-${tab.dataset.vista}`;
+        });
+      })
+    );
+  }
+
+  private iniciarModal(): void {
+    this.modal.querySelectorAll("[data-cerrar]").forEach((b) =>
+      b.addEventListener("click", () => this.cerrarEdicion())
+    );
+    this.modal.addEventListener("mousedown", (e) => {
+      if (e.target === this.modal) this.cerrarEdicion();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !this.modal.hidden) this.cerrarEdicion();
+    });
   }
 }

@@ -12,7 +12,16 @@ export class StorageService {
     if (!datos) return [];
     try {
       const lista: ITarea[] = JSON.parse(datos);
-      return lista.map((t) => Tarea.desdeObjeto(t));
+      if (!Array.isArray(lista)) return [];
+      const tareas: Tarea[] = [];
+      for (const item of lista) {
+        try {
+          tareas.push(Tarea.desdeObjeto(item));
+        } catch {
+          // Se ignora un registro dañado sin perder los demás
+        }
+      }
+      return tareas;
     } catch {
       return [];
     }

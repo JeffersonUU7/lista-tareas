@@ -8,80 +8,157 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="src/styles/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✅</text></svg>">
 </head>
 <body>
-  <div class="app">
-    <header class="topbar">
-      <div class="logo">✓</div>
+<div class="shell">
+
+  <aside class="sidebar">
+    <div class="logo">✓</div>
+    <nav class="nav" role="tablist">
+      <button type="button" class="tab activa" data-vista="tareas" role="tab" aria-selected="true">
+        <i>📋</i><span>Tareas</span><b class="tab-badge" id="badge-tab">0</b>
+      </button>
+      <button type="button" class="tab" data-vista="estadisticas" role="tab" aria-selected="false">
+        <i>📊</i><span>Resumen</span>
+      </button>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <header class="top">
       <div>
         <h1>Gestión de Tareas</h1>
-        <p>Laboratorio #2 · TypeScript + MVC</p>
+        <p>Organiza, prioriza y cumple tus fechas límite</p>
+      </div>
+      <div class="contadores">
+        <span class="pill azul" id="contador-pend">0 pendientes</span>
+        <span class="pill" id="contador-venc">Sin vencidas</span>
       </div>
     </header>
 
-    <div class="grid">
-      <!-- IZQUIERDA: formulario -->
+    <!-- VISTA 1: TAREAS -->
+    <div class="vista grid-tareas" id="vista-tareas">
       <aside class="card nueva">
         <h2>Nueva tarea</h2>
-        <div id="mensaje" class="mensaje"></div>
-        <form id="form-tarea">
+        <form id="form-tarea" novalidate>
           <label for="titulo">Título</label>
-          <input type="text" id="titulo" placeholder="¿Qué tienes que hacer?" required>
+          <input type="text" id="titulo" placeholder="¿Qué tienes que hacer?" autocomplete="off">
           <label for="descripcion">Descripción</label>
-          <textarea id="descripcion" placeholder="Detalles (opcional)" rows="4"></textarea>
-          <button type="submit" id="btn-guardar">Agregar tarea</button>
-          <button type="button" id="btn-cancelar" hidden>Cancelar</button>
+          <textarea id="descripcion" placeholder="Detalles (opcional)" rows="3"></textarea>
+          <div class="fila">
+            <div class="campo">
+              <label for="prioridad">Prioridad</label>
+              <select id="prioridad">
+                <option value="alta">🔴 Alta</option>
+                <option value="media" selected>🟡 Media</option>
+                <option value="baja">🟢 Baja</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label for="fecha">Fecha límite</label>
+              <input type="date" id="fecha">
+            </div>
+          </div>
+          <button type="submit" id="btn-guardar">➕ Agregar tarea</button>
         </form>
       </aside>
 
-      <!-- CENTRO: lista -->
       <section class="card principal">
-        <div class="cabecera-lista">
-          <h2>Mis tareas</h2>
-        </div>
+        <h2>Mis tareas</h2>
         <div class="controles">
-          <input type="search" id="buscar" placeholder="🔍 Buscar por título...">
-          <select id="filtro">
-            <option value="todas">Todas</option>
+          <input type="search" id="buscar" placeholder="🔍 Buscar por título..." autocomplete="off">
+          <select id="filtro-estado" aria-label="Filtrar por estado">
+            <option value="todas">Estado: todas</option>
             <option value="pendientes">Pendientes</option>
             <option value="completadas">Completadas</option>
+            <option value="vencidas">Vencidas</option>
+          </select>
+          <select id="filtro-prioridad" aria-label="Filtrar por prioridad">
+            <option value="todas">Prioridad: todas</option>
+            <option value="alta">Alta</option>
+            <option value="media">Media</option>
+            <option value="baja">Baja</option>
+          </select>
+          <select id="orden" aria-label="Ordenar">
+            <option value="fecha-asc">Fecha: más próxima</option>
+            <option value="fecha-desc">Fecha: más lejana</option>
+            <option value="prioridad-desc">Prioridad: alta primero</option>
+            <option value="prioridad-asc">Prioridad: baja primero</option>
           </select>
         </div>
         <ul id="lista"></ul>
       </section>
+    </div>
 
-      <!-- DERECHA: resumen -->
-      <aside class="card resumen">
-        <h2>Resumen</h2>
-        <div class="anillo-wrap">
-          <div class="anillo" id="anillo">
-            <div class="anillo-centro">
-              <span id="pct-texto">0%</span>
-              <small>completado</small>
+    <!-- VISTA 2: RESUMEN -->
+    <div class="vista" id="vista-estadisticas" hidden>
+      <div class="kpis">
+        <div class="kpi k-total"><small>Total</small><span id="est-total">0</span></div>
+        <div class="kpi k-pend"><small>Pendientes</small><span id="est-pend">0</span></div>
+        <div class="kpi k-comp"><small>Completadas</small><span id="est-comp">0</span></div>
+        <div class="kpi k-venc"><small>Vencidas</small><span id="est-venc">0</span></div>
+      </div>
+      <div class="grid-stats">
+        <section class="card">
+          <h2>Progreso general</h2>
+          <div class="anillo-wrap">
+            <div class="anillo" id="anillo">
+              <div class="anillo-centro"><span id="pct-texto">0%</span><small>completado</small></div>
             </div>
           </div>
-        </div>
-
-        <div class="stats">
-          <div class="stat s-total"><span id="stat-total">0</span><small>Total</small></div>
-          <div class="stat s-pend"><span id="stat-pend">0</span><small>Pendientes</small></div>
-          <div class="stat s-comp"><span id="stat-comp">0</span><small>Completadas</small></div>
-        </div>
-
-        <div class="barras">
-          <div class="barra-fila">
-            <div class="barra-label"><span>Pendientes</span></div>
-            <div class="barra"><div class="barra-fill b-pend" id="barra-pend"></div></div>
-          </div>
-          <div class="barra-fila">
-            <div class="barra-label"><span>Completadas</span></div>
-            <div class="barra"><div class="barra-fill b-comp" id="barra-comp"></div></div>
-          </div>
-        </div>
-      </aside>
+        </section>
+        <section class="card">
+          <h2>Tareas por prioridad</h2>
+          <div class="barra-fila"><div class="barra-label"><span>🔴 Alta</span><b id="num-alta">0</b></div><div class="barra"><div class="barra-fill b-alta" id="bar-alta"></div></div></div>
+          <div class="barra-fila"><div class="barra-label"><span>🟡 Media</span><b id="num-media">0</b></div><div class="barra"><div class="barra-fill b-media" id="bar-media"></div></div></div>
+          <div class="barra-fila"><div class="barra-label"><span>🟢 Baja</span><b id="num-baja">0</b></div><div class="barra"><div class="barra-fill b-baja" id="bar-baja"></div></div></div>
+        </section>
+        <section class="card">
+          <h2>Próximas a vencer</h2>
+          <ul id="proximas"></ul>
+        </section>
+      </div>
     </div>
-  </div>
+  </main>
+</div>
 
-  <script type="module" src="dist/main.js"></script>
+<!-- MODAL DE EDICIÓN -->
+<div class="modal" id="modal-editar" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="titulo-modal">
+    <div class="modal-cab">
+      <h2 id="titulo-modal">✏ Editar tarea</h2>
+      <button type="button" class="modal-x" data-cerrar aria-label="Cerrar">×</button>
+    </div>
+    <form id="form-editar" novalidate>
+      <label for="e-titulo">Título</label>
+      <input type="text" id="e-titulo" autocomplete="off">
+      <label for="e-descripcion">Descripción</label>
+      <textarea id="e-descripcion" rows="3"></textarea>
+      <div class="fila">
+        <div class="campo">
+          <label for="e-prioridad">Prioridad</label>
+          <select id="e-prioridad">
+            <option value="alta">🔴 Alta</option>
+            <option value="media">🟡 Media</option>
+            <option value="baja">🟢 Baja</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="e-fecha">Fecha límite</label>
+          <input type="date" id="e-fecha">
+        </div>
+      </div>
+      <div class="error-modal" id="error-editar"></div>
+      <div class="fila">
+        <button type="button" class="btn-sec" data-cerrar>Cancelar</button>
+        <button type="submit">Guardar cambios</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script type="module" src="dist/main.js"></script>
 </body>
 </html>
